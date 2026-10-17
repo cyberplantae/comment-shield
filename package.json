@@ -86,6 +86,7 @@
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
     },
-    "publish": null
+    "publish": null,
+    "afterPack": "desktop/after-pack.cjs"
   }
 }
