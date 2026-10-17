@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Desktop packages and local secrets
+desktop-server/
+desktop-dist/
+.env.*
+!.env.example

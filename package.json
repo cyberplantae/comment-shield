@@ -1,0 +1,91 @@
+{
+  "name": "comment-shield",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local spellbook for reviewing Instagram comments",
+  "scripts": {
+    "dev": "next dev -p 3188",
+    "build": "next build --webpack",
+    "start": "next start -p 3188",
+    "worker": "tsx scripts/run-worker.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "test": "vitest run --configLoader runner",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/classify-smoke.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "setup:local": "node scripts/setup-local.mjs",
+    "desktop:prepare": "pnpm build && node scripts/prepare-desktop.mjs",
+    "desktop:dev": "electron .",
+    "desktop:pack": "pnpm desktop:prepare && electron-builder --dir",
+    "desktop:dist": "pnpm desktop:prepare && electron-builder",
+    "desktop:test": "node --test desktop/*.test.cjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@electric-sql/pglite": "^0.5.10",
+    "dotenv": "^18.0.6",
+    "drizzle-orm": "^0.45.3",
+    "next": "^16.3.8",
+    "postgres": "^3.4.9",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.4"
+  },
+  "main": "desktop/main.cjs",
+  "license": "MIT",
+  "author": "Comment Shield contributors",
+  "build": {
+    "appId": "org.commentshield.desktop",
+    "productName": "Comment Shield",
+    "directories": {
+      "output": "desktop-dist"
+    },
+    "files": [
+      "desktop/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop-server",
+        "to": "server"
+      }
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.social-networking",
+      "hardenedRuntime": true
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
+  }
+}
