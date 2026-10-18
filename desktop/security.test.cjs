@@ -24,3 +24,16 @@ test('embedded migrations survive reopening without losing saved settings', asyn
  assert.equal(result.rows[0].desktop_enabled,true);
  } finally { if(db) await db.close(); await rm(dir,{recursive:true,force:true}); }
 });
+test('upgrades back up existing data once and reject downgrades', async () => {
+ const fs = require('node:fs'); const {tmpdir}=require('node:os'); const {join}=require('node:path');
+ const {prepareUpgrade,finishUpgrade}=require('./upgrades.cjs');
+ const dir=fs.mkdtempSync(join(tmpdir(),'shield-upgrade-'));
+ try {
+ fs.mkdirSync(join(dir,'database')); fs.writeFileSync(join(dir,'database','fixture'),'saved preferences');
+ finishUpgrade(dir,'0.1.0'); prepareUpgrade(dir,'0.1.1'); finishUpgrade(dir,'0.1.1');
+ const backups=fs.readdirSync(join(dir,'backups'));
+ assert.equal(backups.length,1); assert.equal(fs.readFileSync(join(dir,'backups',backups[0],'database','fixture'),'utf8'),'saved preferences');
+ prepareUpgrade(dir,'0.1.1'); assert.equal(fs.readdirSync(join(dir,'backups')).length,1);
+ assert.throws(()=>prepareUpgrade(dir,'0.1.0'),/newer version/);
+ } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});

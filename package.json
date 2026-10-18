@@ -82,7 +82,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "Comment Shield contributors"
     },
     "nsis": {
       "oneClick": false,
@@ -92,5 +93,6 @@
     "publish": null,
     "afterPack": "desktop/after-pack.cjs",
     "artifactName": "Comment-Shield-${version}-${os}-${arch}.${ext}"
-  }
+  },
+  "homepage": "https://github.com/cyberplantae/comment-shield"
 }

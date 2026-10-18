@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
   }
   const { commentId, action } = parsed.data;
 
-  const rows = await db
+  return db.transaction(async (tx) => {
+  const rows = await tx
     .select({
       comment: schema.comments,
       account: schema.accounts,
@@ -33,51 +34,36 @@ export async function POST(request: NextRequest) {
     .from(schema.comments)
     .innerJoin(schema.accounts, eq(schema.comments.accountId, schema.accounts.id))
     .where(eq(schema.comments.id, commentId))
-    .limit(1);
+    .limit(1).for("update", { of: schema.comments });
 
   const row = rows[0];
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const { comment, account } = row;
 
-  if (action === "keep") {
-    // "Keep" on something already hidden has to actually unhide it, or the
-    // creator's decision silently doesn't take effect on Instagram.
-    const wasHidden = comment.disposition === "hidden" || comment.disposition === "auto_hidden";
-    if (wasHidden) {
-      try {
-        await applyPlatformAction(account, comment, "unhide");
-      } catch (err) {
-        if (!(err instanceof MetaApiError) || !err.isGone) throw err;
-      }
-    }
-    await finalize(comment.id, account.id, "kept", "creator kept this comment", action);
-    return NextResponse.json({ ok: true });
-  }
-
+  if (comment.disposition === "deleted") return NextResponse.json({ error: "This comment has been deleted and cannot be restored." }, {status:409});
   try {
-    await applyPlatformAction(account, comment, action);
+    if (action === "keep") {
+      if (comment.disposition === "hidden" || comment.disposition === "auto_hidden") await applyPlatformAction(account, comment, "unhide");
+    } else await applyPlatformAction(account, comment, action);
   } catch (err) {
     if (err instanceof MetaApiError && err.isGone) {
-      // Already deleted upstream. The end state is what the creator wanted.
-      await finalize(comment.id, account.id, "deleted", "already removed upstream", action);
+      await finalize(tx, comment.id, account.id, "deleted", "already removed upstream", action);
       return NextResponse.json({ ok: true, note: "comment no longer exists" });
     }
     if (err instanceof MetaApiError && err.isAuthFailure) {
-      await db
-        .update(schema.accounts)
-        .set({ disconnectedAt: new Date() })
-        .where(eq(schema.accounts.id, account.id));
-      return NextResponse.json({ error: "reconnect_required" }, { status: 409 });
+      await tx.update(schema.accounts).set({disconnectedAt:new Date()}).where(eq(schema.accounts.id,account.id));
+      return NextResponse.json({ error: "reconnect_required" }, {status:409});
     }
-    throw err;
+    return NextResponse.json({ error: "Instagram could not confirm that change. Check the comment and try again." }, {status:502});
   }
 
   const disposition =
     action === "delete" ? "deleted" : action === "hide" ? "hidden" : "kept";
-  await finalize(comment.id, account.id, disposition, `creator chose ${action}`, action);
+  await finalize(tx, comment.id, account.id, disposition, `creator chose ${action}`, action);
 
   return NextResponse.json({ ok: true });
+  });
 }
 
 async function applyPlatformAction(
@@ -101,7 +87,9 @@ async function applyPlatformAction(
   }
 }
 
+type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function finalize(
+  db: Transaction,
   commentId: string,
   accountId: string,
   disposition: "hidden" | "deleted" | "kept",
@@ -110,7 +98,7 @@ async function finalize(
 ): Promise<void> {
   await db
     .update(schema.comments)
-    .set({ disposition, dispositionReason: reason, actedAt: new Date() })
+    .set({ disposition, dispositionReason: reason, actedAt: new Date(), classifiedAt: new Date(), classifierError: null, nextAttemptAt: null })
     .where(eq(schema.comments.id, commentId));
 
   await db.insert(schema.auditLog).values({

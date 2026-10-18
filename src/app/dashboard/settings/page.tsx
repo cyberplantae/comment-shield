@@ -1,3 +1,4 @@
+import { AccountPicker } from "../../components/AccountPicker";
 import { requireOwner } from "@/lib/auth";
 import Link from "next/link";
 import { SettingsForm } from "@/app/components/SettingsForm";
@@ -26,14 +27,15 @@ function band(v: FormDataEntryValue | null, fallback: (typeof SEVERITIES)[number
     : fallback;
 }
 
-export default async function Settings() {
+export default async function Settings({ searchParams }: {searchParams:Promise<{account?:string}>}) {
+  await requireOwner();
+  const params = await searchParams;
   const accounts = await db
-    .select({ creatorId: schema.accounts.creatorId })
+    .select()
     .from(schema.accounts)
-    .orderBy(desc(schema.accounts.createdAt))
-    .limit(1);
+    .orderBy(desc(schema.accounts.createdAt));
 
-  const account = accounts[0];
+  const account = accounts.find(a => a.id === params.account) ?? accounts[0];
   if (!account) {
     return (
       <main className="space-y-4">
@@ -137,6 +139,7 @@ export default async function Settings() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-10">
+      <AccountPicker accounts={accounts} selected={account.id} path="/dashboard/settings" />
       <header className="flex items-baseline justify-between gap-3">
         <h1 className="text-3xl font-semibold">Inscribe your ward</h1>
         <Link href="/dashboard" className="text-sm underline">

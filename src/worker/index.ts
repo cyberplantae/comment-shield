@@ -122,7 +122,7 @@ async function processBatch(rows: PendingRow[]): Promise<number> {
     await db
       .update(schema.comments)
       .set({ classifierError: "Reader unavailable. Retrying automatically, up to five attempts.", attempts: sql`${schema.comments.attempts} + 1`, nextAttemptAt: new Date(Date.now() + 60000) })
-      .where(inArray(schema.comments.id, inputs.map((i) => i.id)));
+      .where(and(inArray(schema.comments.id, inputs.map((i) => i.id)), isNull(schema.comments.classifiedAt), eq(schema.comments.disposition, "pending")));
     return 0;
   }
 
@@ -134,9 +134,21 @@ async function processBatch(rows: PendingRow[]): Promise<number> {
     const verdict = verdicts.get(comment.id);
     // Model skipped this id — leave it unclassified for the next tick rather
     // than defaulting to benign.
-    if (!verdict) continue;
+    if (!verdict) {
+      await db.update(schema.comments).set({classifierError: "The reader skipped this comment. Retrying up to five attempts.", attempts: sql`${schema.comments.attempts} + 1`, nextAttemptAt: new Date(Date.now() + 60000)}).where(and(eq(schema.comments.id, comment.id), isNull(schema.comments.classifiedAt),eq(schema.comments.disposition,"pending")));
+      continue;
+    }
 
-    const decision = decide(verdict, policy, comment.authorUsername);
+    const completed = await db.transaction(async db => {
+    const [fresh] = await db.select().from(schema.comments).where(eq(schema.comments.id, comment.id)).for("update");
+    if (!fresh || fresh.disposition !== "pending" || fresh.classifiedAt) return false;
+    const [currentPolicy] = await db.select().from(schema.policies).where(eq(schema.policies.creatorId, account.creatorId));
+    if (!currentPolicy) return false;
+    if (process.env.SHIELD_DESKTOP === "1") {
+      const [settings] = await db.select().from(schema.appSettings).where(eq(schema.appSettings.id, "singleton"));
+      if (!settings?.desktopEnabled) return false;
+    }
+    const decision = decide(verdict, policyFromRow(currentPolicy), comment.authorUsername);
 
     let disposition: typeof schema.comments.$inferSelect.disposition = "pending";
     if (decision.action === "ignore") disposition = "ignored";
@@ -167,10 +179,11 @@ async function processBatch(rows: PendingRow[]): Promise<number> {
           disposition = "pending";
         } else if (err instanceof MetaApiError && err.isRateLimited) {
           // Leave classifiedAt null so the next tick retries the action.
-          console.warn("[worker] rate limited; will retry", comment.platformCommentId);
-          continue;
+          await db.update(schema.comments).set({classifierError:"Instagram asked us to wait. Retrying up to five attempts.",attempts:sql`${schema.comments.attempts} + 1`,nextAttemptAt:new Date(Date.now()+300000)}).where(eq(schema.comments.id,comment.id));
+          return false;
         } else {
-          throw err;
+          await db.update(schema.comments).set({ classifierError: "Instagram could not finish this action. Retrying up to five attempts.", attempts: sql`${schema.comments.attempts} + 1`, nextAttemptAt: new Date(Date.now() + 60000) }).where(eq(schema.comments.id, comment.id));
+          return false;
         }
       }
     }
@@ -213,7 +226,9 @@ async function processBatch(rows: PendingRow[]): Promise<number> {
         });
     }
 
-    count++;
+    return true;
+    });
+    if (completed) count++;
   }
 
   await checkPileOn(first.account.id);

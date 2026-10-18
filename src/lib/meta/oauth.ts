@@ -86,6 +86,7 @@ export async function exchangeCode(
 
   const res = await fetch(url, {
     method: "POST",
+    signal: AbortSignal.timeout(30000),
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
   });
@@ -114,11 +115,12 @@ export async function exchangeForLongLived(
     access_token: shortLivedToken,
   });
 
-  const res = await fetch(`${host}/access_token?${params}`);
+  const res = await fetch(`${host}/access_token?${params}`, {signal:AbortSignal.timeout(30000)});
   if (!res.ok) {
     throw new Error(`${platform} long-lived exchange failed (${res.status}): ${await res.text()}`);
   }
   const json = (await res.json()) as { access_token: string; expires_in: number };
+  if (typeof json.access_token !== "string" || !json.access_token || !Number.isFinite(json.expires_in) || json.expires_in <= 0) throw new Error("Meta returned an invalid token response");
   return { accessToken: json.access_token, expiresIn: json.expires_in };
 }
 
@@ -129,10 +131,11 @@ export async function refreshLongLived(
 ): Promise<{ accessToken: string; expiresIn: number }> {
   const host = platform === "instagram" ? GRAPH_HOST : "https://graph.threads.net";
   const grant = platform === "instagram" ? "ig_refresh_token" : "th_refresh_token";
-  const res = await fetch(`${host}/refresh_access_token?${new URLSearchParams({ grant_type: grant, access_token: token })}`);
+  const res = await fetch(`${host}/refresh_access_token?${new URLSearchParams({ grant_type: grant, access_token: token })}`, {signal:AbortSignal.timeout(30000)});
   if (!res.ok) {
     throw new Error(`${platform} token refresh failed (${res.status}): ${await res.text()}`);
   }
   const json = (await res.json()) as { access_token: string; expires_in: number };
+  if (typeof json.access_token !== "string" || !json.access_token || !Number.isFinite(json.expires_in) || json.expires_in <= 0) throw new Error("Meta returned an invalid token response");
   return { accessToken: json.access_token, expiresIn: json.expires_in };
 }

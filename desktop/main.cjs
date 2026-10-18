@@ -4,6 +4,7 @@ const { createServer } = require('node:net');
 const fs = require('node:fs');
 const path = require('node:path');
 const { sessionToken, externalAllowed } = require('./security.cjs');
+const { prepareUpgrade, finishUpgrade } = require('./upgrades.cjs');
 const RELEASES = 'https://github.com/cyberplantae/comment-shield/releases';
 let server, window, stopping = false;
 const smoke = process.env.SHIELD_SMOKE_TEST === '1' && process.env.SHIELD_TEST_MODE === '1' && Boolean(process.env.SHIELD_TEST_USER_DATA);
@@ -26,12 +27,13 @@ async function start() {
   let key;
   if (fs.existsSync(keyPath)) key = safeStorage.decryptString(fs.readFileSync(keyPath));
   else { key = randomBytes(32).toString('base64'); fs.writeFileSync(keyPath, safeStorage.encryptString(key), { mode: 0o600 }); }
+  prepareUpgrade(dataDir, app.getVersion());
   const password = randomBytes(32).toString('base64url');
   const port = await freePort(); const origin = `http://127.0.0.1:${port}`;
   const root = app.isPackaged ? path.join(process.resourcesPath, 'server') : path.join(__dirname, '../desktop-server');
   if (!fs.existsSync(path.join(root, 'server.js'))) throw new Error('The desktop server is missing. Build the desktop package first.');
   // Explicit environment: never inherit development .env/API secrets into a shipped app.
-  const env = { PATH: process.env.PATH, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, SystemRoot: process.env.SystemRoot, TMPDIR: process.env.TMPDIR,
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, SystemRoot: process.env.SystemRoot, TMPDIR: process.env.TMPDIR, TEMP: process.env.TEMP, TMP: process.env.TMP, APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA,
     NODE_ENV: 'production', PORT: String(port), HOSTNAME: '127.0.0.1', PUBLIC_BASE_URL: origin,
     SHIELD_DESKTOP: '1', SHIELD_DATA_DIR: dataDir, SHIELD_MIGRATIONS_DIR: path.join(root, 'drizzle'),
     ADMIN_PASSWORD: password, TOKEN_ENCRYPTION_KEY: key, NEXT_TELEMETRY_DISABLED: '1',
@@ -42,7 +44,7 @@ async function start() {
   server.stdout?.on('data', () => {});
   server.stderr?.on('data', data => { if (process.env.SHIELD_TEST_MODE === '1') process.stderr.write(data); });
   let exited = false;
-  server.on('exit', () => { exited = true; if (!stopping) { if (smoke) { app.exit(1); return; } dialog.showErrorBox('Comment Shield stopped', 'The local engine stopped. Quit and reopen the app. Your saved settings remain on this computer.'); app.quit(); } });
+  server.on('exit', () => { exited = true; if (!stopping && (window || smoke)) { if (smoke) { app.exit(1); return; } dialog.showErrorBox('Comment Shield stopped', 'The local engine stopped. Quit and reopen the app. Your saved settings remain on this computer.'); app.quit(); } });
   const deadline = Date.now() + 90000;
   while (true) {
     if (exited) throw new Error('The local engine could not start.');
@@ -50,6 +52,7 @@ async function start() {
     if (Date.now() > deadline) throw new Error('The local engine took too long to start.');
     await new Promise(resolve => setTimeout(resolve, 250));
   }
+  finishUpgrade(dataDir, app.getVersion());
   const ses = session.fromPartition('comment-shield-desktop');
   ses.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   ses.setPermissionCheckHandler(() => false);

@@ -1,3 +1,6 @@
+import { AccountPicker } from "../components/AccountPicker";
+import { requireOwner } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { desc, eq, inArray, and, gte, isNull, isNotNull, count } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -8,14 +11,15 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 20;
 
 export default async function Dashboard({ searchParams }: {
-  searchParams: Promise<{ view?: string; page?: string }>;
+  searchParams: Promise<{ view?: string; page?: string; account?: string }>;
 }) {
   const params = await searchParams;
   const view = params.view === "hidden" ? "hidden" : "pending";
   const requestedPage = Number(params.page ?? 1);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 100_000) : 1;
-  // Account ownership must be resolved from a session before public deployment.
-  const [account] = await db.select().from(schema.accounts).orderBy(desc(schema.accounts.createdAt)).limit(1);
+  await requireOwner();
+  const accounts = await db.select().from(schema.accounts).orderBy(desc(schema.accounts.createdAt));
+  const account = accounts.find(a => a.id === params.account) ?? accounts[0];
   if (!account) return (
     <main className="soft-panel mx-auto max-w-2xl space-y-5 p-8 sm:p-12">
       <p className="eyebrow">Your first step</p>
@@ -47,10 +51,16 @@ export default async function Dashboard({ searchParams }: {
   const total24h = recentWindows.reduce((sum, row) => sum + row.totalComments, 0);
   const comments = queue.slice(0, PAGE_SIZE);
   const total = view === "pending" ? pendingCount : hiddenCount;
-  const pageLink = (n: number) => `/dashboard?view=${view}&page=${n}`;
+  const pageLink = (n: number) => `/dashboard?account=${account.id}&view=${view}&page=${n}`;
+  async function retry() {
+    "use server"; await requireOwner();
+    await db.update(schema.comments).set({attempts:0,nextAttemptAt:null,classifierError:null}).where(and(eq(schema.comments.accountId,account!.id),eq(schema.comments.disposition,"pending"),isNull(schema.comments.classifiedAt)));
+    revalidatePath("/dashboard");
+  }
 
   return (
     <main className="space-y-7">
+      <AccountPicker accounts={accounts} selected={account.id} path="/dashboard" />
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div className="space-y-2"><p className="eyebrow">Your space on Instagram · @{account.username ?? "your account"}</p>
           <h1 className="text-4xl sm:text-5xl">Within your circle.</h1>
@@ -66,9 +76,9 @@ export default async function Dashboard({ searchParams }: {
         ].map((stat) => <div className="card p-4 sm:p-6" key={stat.label}><p className="stat-number">{stat.n.toLocaleString()}</p><p className="mt-3 text-xs font-medium sm:text-sm">{stat.label}</p><p className="mt-1 text-xs text-[var(--color-muted)]">{stat.note}</p></div>)}
       </div>
       {account.disconnectedAt ? <div role="status" className="card space-y-2 border-[var(--color-sev-hate)] p-5"><p className="font-semibold">Instagram needs you to reconnect</p><p className="text-sm text-[var(--color-muted)]">Access has ended. Reconnect so the bot can manage comments again.</p><Link href="/connect" className="btn btn-primary">Reconnect Instagram</Link></div> : null}
-      {backlog > 0 || failed > 0 ? <div role="status" className="card space-y-2 p-5"><p className="font-medium">Some comments haven’t been reviewed yet</p><p className="text-sm text-[var(--color-muted)]">{backlog} waiting to be read{failed > 0 ? ` · ${failed} could not be read` : ""}. These may still be visible on Instagram.</p><Link href="/setup" className="text-sm underline">Check the comment reader connection</Link></div> : null}
-      {recentWindows.some((row) => row.alertSentAt !== null) ? <div className="soft-panel p-5"><p className="font-medium">There’s been a wave of difficult comments.</p><p className="mt-1 text-sm text-[var(--color-muted)]">Take this at your own pace. You can <Link href="/dashboard/settings" className="underline">adjust your boundaries</Link> or review what has already been hidden below.</p></div> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3"><nav className="review-tabs" aria-label="Comment lists"><Link href="/dashboard" aria-current={view === "pending" ? "page" : undefined}>Needs you <span className="ml-2 font-semibold">{pendingCount}</span></Link><Link href="/dashboard?view=hidden" aria-current={view === "hidden" ? "page" : undefined}>Already hidden <span className="ml-2 font-semibold">{hiddenCount}</span></Link></nav><Link href="/dashboard/settings" className="text-sm underline text-[var(--color-muted)]">Adjust your boundaries ↗</Link></div>
+      {backlog > 0 || failed > 0 ? <div role="status" className="card space-y-2 p-5"><p className="font-medium">Some comments haven’t been reviewed yet</p><p className="text-sm text-[var(--color-muted)]">{backlog} waiting to be read{failed > 0 ? ` · ${failed} could not be read` : ""}. These may still be visible on Instagram.</p><Link href="/setup" className="text-sm underline">Check the comment reader connection</Link>{failed > 0 && <form action={retry}><button className="btn btn-quiet">Try reading these comments again</button></form>}</div> : null}
+      {recentWindows.some((row) => row.alertSentAt !== null) ? <div className="soft-panel p-5"><p className="font-medium">There’s been a wave of difficult comments.</p><p className="mt-1 text-sm text-[var(--color-muted)]">Take this at your own pace. You can <Link href={`/dashboard/settings?account=${account.id}`} className="underline">adjust your boundaries</Link> or review what has already been hidden below.</p></div> : null}
+      <div className="flex flex-wrap items-center justify-between gap-3"><nav className="review-tabs" aria-label="Comment lists"><Link href="/dashboard" aria-current={view === "pending" ? "page" : undefined}>Needs you <span className="ml-2 font-semibold">{pendingCount}</span></Link><Link href={`/dashboard?account=${account.id}&view=hidden`} aria-current={view === "hidden" ? "page" : undefined}>Already hidden <span className="ml-2 font-semibold">{hiddenCount}</span></Link></nav><Link href={`/dashboard/settings?account=${account.id}`} className="text-sm underline text-[var(--color-muted)]">Adjust your boundaries ↗</Link></div>
       <section className="space-y-4" aria-labelledby="list-title">
         <div><h2 id="list-title" className="text-2xl">{view === "pending" ? "Words at the threshold" : "Beyond the ward"}</h2><p className="mt-1 text-sm text-[var(--color-muted)]">{view === "pending" ? "Hide a comment or leave it on your post. You don’t have to read the original to decide." : "No action needed. If we got something wrong, you can put it back."}</p></div>
         {comments.length === 0 ? <div className="card space-y-3 p-10 text-center"><p className="text-3xl text-[var(--color-accent)]" aria-hidden="true">✳</p><h3 className="text-lg font-medium">{page > 1 ? "No more comments on this page" : view === "hidden" ? "Nothing hidden yet" : "No decisions waiting on you"}</h3><p className="text-sm text-[var(--color-muted)]">{page > 1 ? "The list may have changed since your last visit." : view === "hidden" ? "Comments that are hidden will appear here for you to review." : backlog || failed ? "Some comments still need to be processed. Check their status above." : "Close the book for now. Return to these pages whenever you’re ready."}</p>{page > 1 ? <Link href={pageLink(1)} className="btn btn-quiet">Back to the first page</Link> : null}</div> : <ul className="grid gap-4 lg:grid-cols-2">{comments.map((c) => <CommentCard key={`${c.id}:${c.disposition}`} id={c.id} severity={c.severity} confidence={c.confidence} summary={c.summary} text={c.text} author={c.authorUsername} reason={c.dispositionReason} disposition={c.disposition} blurByDefault={policy?.blurQueueByDefault ?? true} />)}</ul>}

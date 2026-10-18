@@ -6,7 +6,7 @@ A desktop spellbook for Instagram creators: choose your boundaries, let an AI re
 
 ## Use the desktop app
 
-1. Download a build for your computer from [Releases](https://github.com/cyberplantae/comment-shield/releases). The initial preview is for Apple Silicon Macs.
+1. Download a build for your computer from [Releases](https://github.com/cyberplantae/comment-shield/releases). Choose the download for your system. The build workflow targets Apple Silicon and Intel Macs, Windows x64, and Linux x64; only builds that pass native startup checks are attached to a release.
 2. Open the download and move Comment Shield into Applications.
 3. Open **My spellbook**. Follow **Connect Instagram**, **Set up comment reader**, and **Choose my boundaries**, in that order.
 4. Test your reader, then choose **Start protection**. Leave the app open and your computer awake for checks to continue.
@@ -25,7 +25,7 @@ Use Ollama for a reader on your computer, or connect a supported online AI provi
 
 ### Manual updates
 
-Quit Comment Shield, download the newer version, and replace the app in Applications. There is no automatic updater. Settings and comments are stored separately in the operating system’s application-data folder. The app menu includes **Show saved-data folder**. Keep that folder and your operating-system keychain: both are needed to recover encrypted connection credentials. Moving the folder to another computer is not a supported credential-transfer method.
+Quit Comment Shield, download the newer version, and replace the app in Applications. There is no automatic updater. Before an upgrade opens your database, the app makes a local backup in the saved-data folder. Older app versions refuse to open a database already used by a newer version. Settings and comments are stored separately in the operating system’s application-data folder. The app menu includes **Show saved-data folder**. Keep that folder and your operating-system keychain: both are needed to recover encrypted connection credentials. Moving the folder to another computer is not a supported credential-transfer method.
 
 The current Mac preview is not notarized for public distribution. A smooth public install requires a Developer ID signing certificate and Apple notarization; development signing is not equivalent.
 
@@ -56,3 +56,7 @@ The web deployment is a separate advanced path. Copy `.env.example` to `.env`, c
 ## License and typography
 
 MIT; see [LICENSE](LICENSE). Bicubik is requested as a locally installed font, with fallback fonts. Its font binary is not distributed with this repository.
+
+## Release signing
+
+Unsigned previews can show operating-system security warnings. Public Mac distribution needs an Apple Developer ID Application certificate and Apple notarization credentials; an Apple Development certificate is insufficient. Windows signing needs a Windows code-signing identity. No signing credentials are included in this repository or its current CI configuration. See [RELEASING.md](RELEASING.md) for the maintainer workflow.

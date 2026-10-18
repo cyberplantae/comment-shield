@@ -50,7 +50,10 @@ export async function reapplyPolicy(creatorId: string): Promise<ReapplyResult> {
     );
 
   for (const { comment, account } of rows) {
-    if (!comment.severity || comment.confidence === null) continue;
+    await db.transaction(async db => {
+    const [fresh] = await db.select().from(schema.comments).where(eq(schema.comments.id, comment.id)).for("update");
+    if (!fresh || fresh.disposition !== "pending") return;
+    if (!comment.severity || comment.confidence === null) return;
 
     const verdict: Assessment = {
       severity: comment.severity,
@@ -60,7 +63,7 @@ export async function reapplyPolicy(creatorId: string): Promise<ReapplyResult> {
     };
 
     const decision = decide(verdict, policy, comment.authorUsername);
-    if (decision.action === "queue") continue; // still wants a human; leave it
+    if (decision.action === "queue") return; // still wants a human; leave it
 
     if (decision.action === "ignore") {
       await db
@@ -71,7 +74,7 @@ export async function reapplyPolicy(creatorId: string): Promise<ReapplyResult> {
         })
         .where(eq(schema.comments.id, comment.id));
       result.cleared++;
-      continue;
+      return;
     }
 
     // hide / delete: the threshold came down far enough to act on this one.
@@ -89,7 +92,7 @@ export async function reapplyPolicy(creatorId: string): Promise<ReapplyResult> {
       // Leave the comment pending and move on.
       if (!(err instanceof MetaApiError) || !err.isGone) {
         result.failed++;
-        continue;
+        return;
       }
     }
 
@@ -112,6 +115,7 @@ export async function reapplyPolicy(creatorId: string): Promise<ReapplyResult> {
     });
 
     result.hidden++;
+    });
   }
 
   return result;
