@@ -89,7 +89,9 @@ async function processBatch(rows: PendingRow[]): Promise<number> {
             .where(eq(schema.comments.id, comment.id));
           continue;
         }
-        throw err;
+        if (err instanceof MetaApiError && err.isAuthFailure) await db.update(schema.accounts).set({disconnectedAt:new Date()}).where(eq(schema.accounts.id,account.id));
+        await db.update(schema.comments).set({classifierError:"Instagram could not read this comment. Check the connection; retries stop after five attempts.",attempts:sql`${schema.comments.attempts} + 1`,nextAttemptAt:new Date(Date.now()+60000)}).where(and(eq(schema.comments.id,comment.id),isNull(schema.comments.classifiedAt),eq(schema.comments.disposition,"pending")));
+        continue;
       }
     }
 

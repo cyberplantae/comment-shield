@@ -42,3 +42,10 @@ it('bounds retries for missing classifier verdicts',async()=> {
  const [comment]=await db.select().from(schema.comments).where(eq(schema.comments.id,commentId));
  expect(comment?.attempts).toBe(5); expect(classifyBatch).toHaveBeenCalledTimes(5); expect(setHidden).not.toHaveBeenCalled();
 });
+it('keeps failed platform actions pending with a bounded retry delay',async()=> {
+ vi.mocked(classifyBatch).mockResolvedValue(new Map([[commentId,{id:commentId,severity:'hateful',confidence:99,categories:['identity_hate'],targetsPhysicalSafety:false,summary:'Possible identity attack'}]]));
+ vi.mocked(setHidden).mockRejectedValueOnce(new Error('fixture connection interrupted'));
+ await tick();
+ const [comment]=await db.select().from(schema.comments).where(eq(schema.comments.id,commentId));
+ expect(comment?.disposition).toBe('pending'); expect(comment?.classifiedAt).toBeNull(); expect(comment?.attempts).toBe(1); expect(comment?.nextAttemptAt).not.toBeNull();
+});

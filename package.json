@@ -72,10 +72,12 @@
         "zip"
       ],
       "category": "public.app-category.social-networking",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "icon": "build/icon.png"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png"
     },
     "linux": {
       "target": [
@@ -83,7 +85,8 @@
         "deb"
       ],
       "category": "Utility",
-      "maintainer": "Comment Shield contributors"
+      "maintainer": "Comment Shield contributors",
+      "icon": "build/icon.png"
     },
     "nsis": {
       "oneClick": false,
