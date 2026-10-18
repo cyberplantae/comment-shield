@@ -6,11 +6,13 @@ const path = require('node:path');
 const { sessionToken, externalAllowed } = require('./security.cjs');
 const RELEASES = 'https://github.com/cyberplantae/comment-shield/releases';
 let server, window, stopping = false;
+const smoke = process.env.SHIELD_SMOKE_TEST === '1' && process.env.SHIELD_TEST_MODE === '1' && Boolean(process.env.SHIELD_TEST_USER_DATA);
 app.setName('Comment Shield');
 if (process.env.SHIELD_TEST_USER_DATA) app.setPath('userData', process.env.SHIELD_TEST_USER_DATA);
 if (!app.requestSingleInstanceLock()) { app.quit(); } else {
   app.on('second-instance', () => { if (window) { window.show(); window.focus(); } });
   app.whenReady().then(start).catch(error => {
+    if (smoke) { console.error(error.message); app.exit(1); return; }
     dialog.showErrorBox('Your spellbook could not open', `${error.message}\nYour saved data has not been removed.`); app.quit();
   });
 }
@@ -40,7 +42,7 @@ async function start() {
   server.stdout?.on('data', () => {});
   server.stderr?.on('data', data => { if (process.env.SHIELD_TEST_MODE === '1') process.stderr.write(data); });
   let exited = false;
-  server.on('exit', () => { exited = true; if (!stopping) { dialog.showErrorBox('Comment Shield stopped', 'The local engine stopped. Quit and reopen the app. Your saved settings remain on this computer.'); app.quit(); } });
+  server.on('exit', () => { exited = true; if (!stopping) { if (smoke) { app.exit(1); return; } dialog.showErrorBox('Comment Shield stopped', 'The local engine stopped. Quit and reopen the app. Your saved settings remain on this computer.'); app.quit(); } });
   const deadline = Date.now() + 90000;
   while (true) {
     if (exited) throw new Error('The local engine could not start.');
@@ -53,6 +55,13 @@ async function start() {
   ses.setPermissionCheckHandler(() => false);
   const unlock = () => ses.cookies.set({ url: origin, name: 'shield_session', value: sessionToken(password), httpOnly: true, sameSite: 'lax', path: '/', expirationDate: Date.now()/1000 + 43200 });
   await unlock();
+  if (smoke) {
+    const response = await fetch(origin + '/desktop', { headers: { cookie: 'shield_session=' + sessionToken(password) }, redirect: 'manual' });
+    const content = await response.text();
+    if (response.status !== 200 || !content.includes('A ward of your own.')) throw new Error('Authenticated first-run check failed');
+    fs.writeFileSync(path.join(dataDir, 'smoke-result.json'), JSON.stringify({ok:true}));
+    app.quit(); return;
+  }
   const renew = setInterval(() => { void unlock(); }, 3600000); renew.unref();
   window = new BrowserWindow({ width: 1180, height: 820, minWidth: 740, minHeight: 620, show: false, backgroundColor: '#14121b', title: 'Comment Shield', webPreferences: { session: ses, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true } });
   const openExternal = url => { if (externalAllowed(url)) void shell.openExternal(url); };
