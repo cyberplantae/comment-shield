@@ -2,11 +2,11 @@
 
 Desktop preview validation includes TypeScript, unit tests for moderation rules/webhooks/credential encryption, desktop session/navigation tests, embedded database migration and persistence tests, and a production build.
 
-Still required before a general release:
+Remaining validation and optional distribution improvements:
 
 - Validate live Instagram permissions, token refresh, pagination coverage, and reversible moderation against a dedicated test account.
 - Automated fixture tests now cover creator decisions during classification, bounded retries, and interrupted platform calls. Live network ambiguity and platform-side outcomes still need dedicated-account validation.
-- Complete public-distribution signing and macOS notarization. Native packaged startup checks now pass on Windows x64, Ubuntu x64, Intel Mac and Apple Silicon Mac. These checks do not replace full installer/UI acceptance tests.
+- Optional: add public-distribution signing and macOS notarization for smoother installation. Native packaged startup checks now pass on Windows x64, Ubuntu x64, Intel Mac and Apple Silicon Mac. These checks do not replace full installer/UI acceptance tests.
 - Automatic pre-upgrade backups, downgrade refusal, and database reopen/migration are tested locally. Real upgrades across installed releases still need user acceptance checks.
 - Review the full creator onboarding flow with nontechnical users; Meta’s developer registration remains an external setup requirement.
 
