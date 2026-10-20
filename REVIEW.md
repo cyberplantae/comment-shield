@@ -15,3 +15,9 @@ No live Instagram account was used for automated validation. Passing local tests
 ## 0.1.1 preview evidence
 
 [Native build run](https://github.com/cyberplantae/comment-shield/actions/runs/39169498159) passed on all four targets for commit `c8a93db24dfc6753eeffe49ae880d1810adb0fd5`. Each target ran TypeScript checks, 47 unit/integration tests and 4 desktop tests, then built and launched its packaged engine with isolated data and moderation disabled.
+
+## Restart and upgrade-backup acceptance
+
+On October 20, 2026, the published Apple Silicon 0.1.1 DMG passed an isolated executable check directly from its read-only mounted image. The check opens the app three times: first launch, restart with a saved local-model selection, and a simulated version upgrade. It verifies key reuse, settings persistence, and a readable backup containing the matching encrypted key and settings. Moderation stays disabled throughout.
+
+The native CI smoke script now runs this same sequence on each platform. The simulated upgrade uses the current database with an older version marker; it does not replace an upgrade test from an actual older release, installer acceptance, or visual onboarding tests.

@@ -1,6 +1,6 @@
 # Maintainer release checklist
 
-The Desktop builds workflow runs unit/database tests, builds on native Windows, Linux, Intel Mac and Apple Silicon runners, and launches each packaged engine with temporary data and moderation disabled. Its smoke check verifies OS-protected credential storage, database initialization, and an authenticated first-run page. This is not a live Instagram test or a full visual/accessibility audit.
+The Desktop builds workflow runs unit/database tests, builds on native Windows, Linux, Intel Mac and Apple Silicon runners, and launches each packaged engine with temporary data and moderation disabled. Its smoke check verifies OS-protected credential storage, database initialization, an authenticated first-run page, saved settings and key reuse after restart, and a readable backup after a simulated upgrade. This is not a live Instagram test or a full visual/accessibility audit.
 
 Download the successful workflow artifacts and publish a prerelease with platform names and SHA-256 hashes. Do not publish a failed platform's files. Bump package.json before a new release so automatic upgrade backups run. The app never auto-downloads updates.
 
@@ -27,3 +27,9 @@ Keep pause/close behavior clear: an already-sent platform request may finish aft
 ## Recovery
 
 Quit the app before restoring a backup. Preserve a copy of the current saved-data folder, then restore the matching database and credential-key from one backup. Credentials require the same operating-system keychain. Do not delete or overwrite data while the app is open. Copying a database to another machine does not transfer its keychain credentials.
+
+## Check a downloaded or installed application
+
+Run `node scripts/smoke-desktop.cjs "/absolute/path/to/executable"` from a development checkout with dependencies installed. Omit the argument to check the native unpacked build in `desktop-dist`. On macOS, the executable is inside `Comment Shield.app/Contents/MacOS/Comment Shield`. The check creates and removes its own temporary profile; it does not use the owner's saved data or connect to Instagram. Run it as a normal desktop user with an unlocked keychain, not as root.
+
+Before general release, also manually install and open each platform's download, complete the onboarding with a dedicated test account, close/reopen, and install the next version over it. Confirm that settings and the connection remain, and that uninstall behavior is explained. Record the exact versions and operating systems tested. Automated startup checks do not assert that an installer or every visible control works.
